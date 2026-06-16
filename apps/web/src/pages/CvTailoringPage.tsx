@@ -1,37 +1,70 @@
 import type { CvTailoringResponse } from "@careeros/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FilePenLine } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { EmptyState } from "../components/EmptyState";
+import { MockBadge } from "../components/MockBadge";
 import { PageHeader } from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
-import { sampleCvTailoring, sampleProfile } from "../lib/mock";
+import { useApplications, useProfile } from "../lib/queries";
 
 export function CvTailoringPage() {
-  const [masterCv, setMasterCv] = useState(sampleProfile.masterCv ?? "");
+  const queryClient = useQueryClient();
+  const { data: profile } = useProfile();
+  const { data: applications = [] } = useApplications();
+  const [applicationId, setApplicationId] = useState("");
+  const [masterCv, setMasterCv] = useState("");
   const [jobDescription, setJobDescription] = useState("");
-  const [result, setResult] = useState<CvTailoringResponse | null>(sampleCvTailoring);
-  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<CvTailoringResponse | null>(null);
   const [error, setError] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiFetch<CvTailoringResponse>("/api/ai/cv-tailor", {
+        method: "POST",
+        body: JSON.stringify({
+          applicationId: applicationId || undefined,
+          masterCv,
+          jobDescription,
+          careerProfile: profile
+        })
+      }),
+    onSuccess: async (data) => {
+      setResult(data);
+      if (applicationId) {
+        await queryClient.invalidateQueries({ queryKey: ["application-workspace", applicationId] });
+      }
+    }
+  });
+
+  useEffect(() => {
+    if (profile?.masterCv) {
+      setMasterCv(profile.masterCv);
+    }
+  }, [profile]);
+
+  function handleApplicationChange(nextId: string) {
+    setApplicationId(nextId);
+    const application = applications.find((item) => item.id === nextId);
+
+    if (application?.jobDescription) {
+      setJobDescription(application.jobDescription);
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setLoading(true);
     setError("");
 
+    if (!profile) {
+      setError("Save your career profile before generating CV tailoring.");
+      return;
+    }
+
     try {
-      const data = await apiFetch<CvTailoringResponse>("/api/ai/cv-tailor", {
-        method: "POST",
-        body: JSON.stringify({
-          masterCv,
-          jobDescription,
-          careerProfile: sampleProfile
-        })
-      });
-      setResult(data);
+      await mutation.mutateAsync();
     } catch (err) {
-      setResult(sampleCvTailoring);
       setError(err instanceof Error ? err.message : "Unable to tailor CV.");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -41,9 +74,9 @@ export function CvTailoringPage() {
         eyebrow="Evidence-based tailoring"
         title="CV tailoring assistant"
         actions={
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={mutation.isPending}>
             <FilePenLine size={16} />
-            {loading ? "Tailoring..." : "Generate suggestions"}
+            {mutation.isPending ? "Tailoring..." : "Generate suggestions"}
           </button>
         }
       />
@@ -51,6 +84,17 @@ export function CvTailoringPage() {
       <section className="content-grid two-column">
         <article className="panel form-panel">
           <h3>Inputs</h3>
+          <label>
+            Saved application
+            <select value={applicationId} onChange={(event) => handleApplicationChange(event.target.value)}>
+              <option value="">Not linked</option>
+              {applications.map((application) => (
+                <option key={application.id} value={application.id}>
+                  {application.company} - {application.role}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Master CV
             <textarea
@@ -73,7 +117,9 @@ export function CvTailoringPage() {
 
         {result ? (
           <article className="panel">
-            <span className="eyebrow">Positioning</span>
+            <span className="eyebrow">
+              Positioning <MockBadge show={result.isMock} />
+            </span>
             <h2>Role-specific angle</h2>
             <p className="muted">{result.positioningSummary}</p>
             <h3>ATS keywords</h3>
@@ -93,7 +139,11 @@ export function CvTailoringPage() {
               ))}
             </div>
           </article>
-        ) : null}
+        ) : (
+          <article className="panel">
+            <EmptyState title="No CV tailoring yet" body="Choose a saved application or paste a job description." />
+          </article>
+        )}
       </section>
 
       {result ? (

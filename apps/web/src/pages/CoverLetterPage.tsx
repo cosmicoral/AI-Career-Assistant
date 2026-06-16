@@ -1,39 +1,68 @@
 import type { CoverLetterResponse } from "@careeros/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { EmptyState } from "../components/EmptyState";
+import { MockBadge } from "../components/MockBadge";
 import { PageHeader } from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
-import { sampleCoverLetter, sampleProfile } from "../lib/mock";
+import { useApplications, useProfile } from "../lib/queries";
 
 export function CoverLetterPage() {
-  const [company, setCompany] = useState("Deloitte");
-  const [role, setRole] = useState("Graduate Consultant");
+  const queryClient = useQueryClient();
+  const { data: profile } = useProfile();
+  const { data: applications = [] } = useApplications();
+  const [applicationId, setApplicationId] = useState("");
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
   const [jobDescription, setJobDescription] = useState("");
-  const [result, setResult] = useState<CoverLetterResponse | null>(sampleCoverLetter);
-  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<CoverLetterResponse | null>(null);
   const [error, setError] = useState("");
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      const data = await apiFetch<CoverLetterResponse>("/api/ai/cover-letter", {
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiFetch<CoverLetterResponse>("/api/ai/cover-letter", {
         method: "POST",
         body: JSON.stringify({
+          applicationId: applicationId || undefined,
           company,
           role,
           jobDescription,
-          careerProfile: sampleProfile
+          careerProfile: profile
         })
-      });
+      }),
+    onSuccess: async (data) => {
       setResult(data);
+      if (applicationId) {
+        await queryClient.invalidateQueries({ queryKey: ["application-workspace", applicationId] });
+      }
+    }
+  });
+
+  function handleApplicationChange(nextId: string) {
+    setApplicationId(nextId);
+    const application = applications.find((item) => item.id === nextId);
+
+    if (application) {
+      setCompany(application.company);
+      setRole(application.role);
+      setJobDescription(application.jobDescription ?? "");
+    }
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+
+    if (!profile) {
+      setError("Save your career profile before generating a cover letter.");
+      return;
+    }
+
+    try {
+      await mutation.mutateAsync();
     } catch (err) {
-      setResult(sampleCoverLetter);
       setError(err instanceof Error ? err.message : "Unable to generate cover letter.");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -43,9 +72,9 @@ export function CoverLetterPage() {
         eyebrow="UK graduate applications"
         title="Cover letter generator"
         actions={
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={mutation.isPending}>
             <FileText size={16} />
-            {loading ? "Writing..." : "Generate letter"}
+            {mutation.isPending ? "Writing..." : "Generate letter"}
           </button>
         }
       />
@@ -54,12 +83,23 @@ export function CoverLetterPage() {
         <article className="panel form-panel">
           <h3>Role context</h3>
           <label>
+            Saved application
+            <select value={applicationId} onChange={(event) => handleApplicationChange(event.target.value)}>
+              <option value="">Not linked</option>
+              {applications.map((application) => (
+                <option key={application.id} value={application.id}>
+                  {application.company} - {application.role}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Company
-            <input value={company} onChange={(event) => setCompany(event.target.value)} />
+            <input value={company} onChange={(event) => setCompany(event.target.value)} required />
           </label>
           <label>
             Role
-            <input value={role} onChange={(event) => setRole(event.target.value)} />
+            <input value={role} onChange={(event) => setRole(event.target.value)} required />
           </label>
           <label>
             Job description
@@ -67,6 +107,7 @@ export function CoverLetterPage() {
               className="analysis-input"
               value={jobDescription}
               onChange={(event) => setJobDescription(event.target.value)}
+              required
             />
           </label>
           {error ? <p className="error-text">{error}</p> : null}
@@ -74,11 +115,17 @@ export function CoverLetterPage() {
 
         {result ? (
           <article className="panel">
-            <span className="eyebrow">Draft</span>
+            <span className="eyebrow">
+              Draft <MockBadge show={result.isMock} />
+            </span>
             <h2>{role}</h2>
             <pre className="letter-output">{result.letter}</pre>
           </article>
-        ) : null}
+        ) : (
+          <article className="panel">
+            <EmptyState title="No cover letter yet" body="Choose a saved application or enter role details." />
+          </article>
+        )}
       </section>
 
       {result ? (

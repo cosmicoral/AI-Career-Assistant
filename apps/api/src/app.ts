@@ -8,8 +8,11 @@ import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/error-handler";
 import { aiRouter } from "./routes/ai";
 import { applicationsRouter } from "./routes/applications";
+import { assessmentCentreRouter } from "./routes/assessment-centre";
 import { healthRouter } from "./routes/health";
 import { interviewNotesRouter } from "./routes/interview-notes";
+import { networkingRouter } from "./routes/networking";
+import { onlineTestsRouter } from "./routes/online-tests";
 import { profileRouter } from "./routes/profile";
 
 export const app = express();
@@ -37,5 +40,8 @@ app.use("/api/ai", requireAuth, aiRouter);
 app.use("/api/profile", requireAuth, profileRouter);
 app.use("/api/applications", requireAuth, applicationsRouter);
 app.use("/api/interview-notes", requireAuth, interviewNotesRouter);
+app.use("/api/networking", requireAuth, networkingRouter);
+app.use("/api/assessment-centre", requireAuth, assessmentCentreRouter);
+app.use("/api/online-tests", requireAuth, onlineTestsRouter);
 
 app.use(errorHandler);

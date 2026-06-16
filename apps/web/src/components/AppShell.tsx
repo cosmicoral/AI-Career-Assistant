@@ -2,15 +2,19 @@ import {
   BarChart3,
   BriefcaseBusiness,
   Building2,
+  ClipboardCheck,
   ClipboardList,
   FilePenLine,
   FileText,
   Gauge,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   MessageSquareText,
+  Network,
   UserRound
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 
@@ -22,11 +26,20 @@ const navItems = [
   { to: "/cover-letter", label: "Cover Letter", icon: FileText },
   { to: "/application-answers", label: "Answers", icon: MessageSquareText },
   { to: "/tracker", label: "Tracker", icon: ClipboardList },
+  { to: "/networking", label: "Networking", icon: Network },
+  { to: "/assessment-centre", label: "Assessment Centre", icon: ClipboardCheck },
+  { to: "/online-tests", label: "Online Tests", icon: ListChecks },
   { to: "/interview-kb", label: "Interview KB", icon: Building2 }
 ];
 
 export function AppShell() {
   const { isDemoMode, session, signOut } = useAuth();
+  const queryClient = useQueryClient();
+
+  async function handleSignOut() {
+    await signOut();
+    queryClient.clear();
+  }
 
   return (
     <div className="app-shell">
@@ -67,9 +80,11 @@ export function AppShell() {
           </div>
           <div className="topbar-actions">
             <span className="pill">{isDemoMode ? "Local mode" : session?.user.email}</span>
-            <button className="icon-button" onClick={signOut} aria-label="Sign out" title="Sign out">
-              <LogOut size={18} />
-            </button>
+            {!isDemoMode ? (
+              <button className="icon-button" onClick={handleSignOut} aria-label="Sign out" title="Sign out">
+                <LogOut size={18} />
+              </button>
+            ) : null}
           </div>
         </header>
         <Outlet />

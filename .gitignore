@@ -11,3 +11,4 @@ yarn-debug.log*
 supabase/.branches
 supabase/.temp
 *.tsbuildinfo
+.local-data

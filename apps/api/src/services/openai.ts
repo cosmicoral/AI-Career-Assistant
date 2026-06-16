@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { env, requireOpenAiConfig } from "../config/env";
+import { env, isOpenAiConfigured, requireOpenAiConfig } from "../config/env";
 
 let client: OpenAI | null = null;
 
@@ -21,9 +21,14 @@ export async function generateStructuredObject<T>(
     system: string;
     user: string;
     schema: z.ZodSchema<T>;
+    mock?: () => T | Promise<T>;
     temperature?: number;
   }
 ): Promise<T> {
+  if (!isOpenAiConfigured && env.NODE_ENV !== "production" && params.mock) {
+    return params.schema.parse(await params.mock());
+  }
+
   const completion = await getClient().chat.completions.create({
     model: env.OPENAI_MODEL || "gpt-4.1-mini",
     temperature: params.temperature ?? 0.2,

@@ -1,9 +1,25 @@
-import { Save } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
 import type { CareerProfile } from "@careeros/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Save } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
-import { sampleProfile } from "../lib/mock";
+import { useProfile } from "../lib/queries";
+
+const emptyProfile: CareerProfile = {
+  headline: "",
+  visaStatus: "",
+  targetIndustries: [],
+  targetLocations: [],
+  preferredRoles: [],
+  skills: [],
+  achievements: [],
+  education: [],
+  experience: [],
+  projects: [],
+  masterCv: ""
+};
 
 function splitList(value: string) {
   return value
@@ -13,23 +29,37 @@ function splitList(value: string) {
 }
 
 export function ProfilePage() {
-  const [profile, setProfile] = useState<CareerProfile>(sampleProfile);
+  const queryClient = useQueryClient();
+  const { data: savedProfile, isLoading, error } = useProfile();
+  const [profile, setProfile] = useState<CareerProfile>(emptyProfile);
   const [status, setStatus] = useState("");
   const skillsValue = useMemo(() => profile.skills.join("\n"), [profile.skills]);
   const achievementsValue = useMemo(() => profile.achievements.join("\n"), [profile.achievements]);
+
+  const saveMutation = useMutation({
+    mutationFn: (nextProfile: CareerProfile) =>
+      apiFetch<CareerProfile>("/api/profile", {
+        method: "PUT",
+        body: JSON.stringify(nextProfile)
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["profile"] });
+    }
+  });
+
+  useEffect(() => {
+    setProfile(savedProfile ?? emptyProfile);
+  }, [savedProfile]);
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
     setStatus("Saving...");
 
     try {
-      await apiFetch<CareerProfile>("/api/profile", {
-        method: "PUT",
-        body: JSON.stringify(profile)
-      });
+      await saveMutation.mutateAsync(profile);
       setStatus("Profile saved.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to save profile.");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Unable to save profile.");
     }
   }
 
@@ -39,12 +69,21 @@ export function ProfilePage() {
         eyebrow="Career knowledge base"
         title="Permanent career profile"
         actions={
-          <button className="primary-button" type="submit">
+          <button className="primary-button" type="submit" disabled={saveMutation.isPending}>
             <Save size={16} />
-            Save profile
+            {saveMutation.isPending ? "Saving..." : "Save profile"}
           </button>
         }
       />
+
+      {isLoading ? <p className="inline-status">Loading profile...</p> : null}
+      {error ? <p className="error-text">{error instanceof Error ? error.message : "Unable to load profile."}</p> : null}
+      {!isLoading && !savedProfile ? (
+        <EmptyState
+          title="No career profile saved yet"
+          body="Add your real profile evidence here. AI workflows will use this instead of dummy data."
+        />
+      ) : null}
 
       <section className="content-grid two-column">
         <article className="panel form-panel">
@@ -68,6 +107,13 @@ export function ProfilePage() {
             <textarea
               value={profile.targetIndustries.join("\n")}
               onChange={(event) => setProfile({ ...profile, targetIndustries: splitList(event.target.value) })}
+            />
+          </label>
+          <label>
+            Target locations
+            <textarea
+              value={profile.targetLocations.join("\n")}
+              onChange={(event) => setProfile({ ...profile, targetLocations: splitList(event.target.value) })}
             />
           </label>
           <label>
@@ -113,24 +159,31 @@ export function ProfilePage() {
             <h2>Profile evidence used by AI</h2>
           </div>
         </div>
-        <div className="evidence-grid">
-          {profile.experience.map((item) => (
-            <article className="evidence-card" key={`${item.organisation}-${item.title}`}>
-              <span>Experience</span>
-              <strong>{item.title}</strong>
-              <p>{item.organisation}</p>
-              <small>{item.achievements.join(" | ")}</small>
-            </article>
-          ))}
-          {profile.projects.map((item) => (
-            <article className="evidence-card" key={item.name}>
-              <span>Project</span>
-              <strong>{item.name}</strong>
-              <p>{item.summary}</p>
-              <small>{item.outcomes.join(" | ")}</small>
-            </article>
-          ))}
-        </div>
+        {profile.experience.length === 0 && profile.projects.length === 0 ? (
+          <EmptyState
+            title="No structured experience yet"
+            body="This MVP stores experience/projects in the profile schema, but the current editor only exposes the core text evidence fields."
+          />
+        ) : (
+          <div className="evidence-grid">
+            {profile.experience.map((item) => (
+              <article className="evidence-card" key={`${item.organisation}-${item.title}`}>
+                <span>Experience</span>
+                <strong>{item.title}</strong>
+                <p>{item.organisation}</p>
+                <small>{item.achievements.join(" | ")}</small>
+              </article>
+            ))}
+            {profile.projects.map((item) => (
+              <article className="evidence-card" key={item.name}>
+                <span>Project</span>
+                <strong>{item.name}</strong>
+                <p>{item.summary}</p>
+                <small>{item.outcomes.join(" | ")}</small>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
       {status ? <p className="inline-status">{status}</p> : null}
     </form>

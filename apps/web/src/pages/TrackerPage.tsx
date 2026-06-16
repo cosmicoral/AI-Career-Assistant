@@ -1,11 +1,14 @@
 import type { Application, ApplicationCreate, ApplicationStatus } from "@careeros/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { apiFetch } from "../lib/api";
 import { applicationStatuses } from "../lib/constants";
-import { sampleApplications } from "../lib/mock";
+import { useApplications } from "../lib/queries";
 
 const emptyApplication: ApplicationCreate = {
   company: "",
@@ -14,6 +17,7 @@ const emptyApplication: ApplicationCreate = {
   applicationDate: null,
   deadline: null,
   jobUrl: "",
+  jobDescription: "",
   location: "",
   salary: "",
   fitScore: null,
@@ -21,9 +25,21 @@ const emptyApplication: ApplicationCreate = {
 };
 
 export function TrackerPage() {
-  const [applications, setApplications] = useState<Application[]>(sampleApplications);
+  const queryClient = useQueryClient();
+  const { data: applications = [], isLoading, error } = useApplications();
   const [draft, setDraft] = useState<ApplicationCreate>(emptyApplication);
   const [status, setStatus] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: (application: ApplicationCreate) =>
+      apiFetch<Application>("/api/applications", {
+        method: "POST",
+        body: JSON.stringify(application)
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["applications"] });
+    }
+  });
 
   const metrics = useMemo(
     () => ({
@@ -43,29 +59,19 @@ export function TrackerPage() {
     setStatus("Saving...");
 
     try {
-      const created = await apiFetch<Application>("/api/applications", {
-        method: "POST",
-        body: JSON.stringify(draft)
-      });
-      setApplications([created, ...applications]);
+      await createMutation.mutateAsync(draft);
       setDraft(emptyApplication);
       setStatus("Application added.");
-    } catch (error) {
-      const localApplication: Application = {
-        ...draft,
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      setApplications([localApplication, ...applications]);
-      setDraft(emptyApplication);
-      setStatus(error instanceof Error ? error.message : "Saved locally.");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Unable to save application.");
     }
   }
 
   return (
     <div className="page-grid">
       <PageHeader eyebrow="Application workflow" title="Tracker" />
+
+      {error ? <p className="error-text">{error instanceof Error ? error.message : "Unable to load applications."}</p> : null}
 
       <section className="metrics-strip">
         <div>
@@ -98,6 +104,14 @@ export function TrackerPage() {
             <input value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value })} required />
           </label>
           <label>
+            Location
+            <input value={draft.location ?? ""} onChange={(event) => setDraft({ ...draft, location: event.target.value })} />
+          </label>
+          <label>
+            Job URL
+            <input value={draft.jobUrl ?? ""} onChange={(event) => setDraft({ ...draft, jobUrl: event.target.value })} />
+          </label>
+          <label>
             Status
             <select
               value={draft.status}
@@ -118,21 +132,9 @@ export function TrackerPage() {
               onChange={(event) => setDraft({ ...draft, deadline: event.target.value || null })}
             />
           </label>
-          <label>
-            Fit score
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={draft.fitScore ?? ""}
-              onChange={(event) =>
-                setDraft({ ...draft, fitScore: event.target.value ? Number(event.target.value) : null })
-              }
-            />
-          </label>
-          <button className="primary-button" type="submit">
+          <button className="primary-button" type="submit" disabled={createMutation.isPending}>
             <Plus size={16} />
-            Add application
+            {createMutation.isPending ? "Adding..." : "Add application"}
           </button>
           {status ? <p className="inline-status">{status}</p> : null}
         </form>
@@ -144,32 +146,48 @@ export function TrackerPage() {
               <h2>Applications</h2>
             </div>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Deadline</th>
-                  <th>Fit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {applications.map((application) => (
-                  <tr key={application.id}>
-                    <td>{application.company}</td>
-                    <td>{application.role}</td>
-                    <td>
-                      <StatusBadge status={application.status} />
-                    </td>
-                    <td>{application.deadline ?? "-"}</td>
-                    <td>{application.fitScore ?? "-"}</td>
+          {isLoading ? (
+            <p className="inline-status">Loading applications...</p>
+          ) : applications.length === 0 ? (
+            <EmptyState
+              title="No applications saved"
+              body="Add a real company and role here, or use Job Fit to save one with analysis."
+              action={
+                <Link className="secondary-button" to="/job-fit">
+                  Use job fit workflow
+                </Link>
+              }
+            />
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Deadline</th>
+                    <th>Fit</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {applications.map((application) => (
+                    <tr key={application.id}>
+                      <td>
+                        <Link to={`/applications/${application.id}`}>{application.company}</Link>
+                      </td>
+                      <td>{application.role}</td>
+                      <td>
+                        <StatusBadge status={application.status} />
+                      </td>
+                      <td>{application.deadline ?? "-"}</td>
+                      <td>{application.fitScore ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </article>
       </section>
     </div>

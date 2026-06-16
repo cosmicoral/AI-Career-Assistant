@@ -7,7 +7,8 @@ type AuthContextValue = {
   isDemoMode: boolean;
   loading: boolean;
   session: Session | null;
-  signInWithEmail: (email: string) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUpWithPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -40,11 +41,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isDemoMode: !isSupabaseConfigured,
       loading,
       session,
-      signInWithEmail: async (email: string) => {
+      signInWithPassword: async (email: string, password: string) => {
         if (!supabase) return;
 
-        const { error } = await supabase.auth.signInWithOtp({
+        const { error } = await supabase.auth.signInWithPassword({
           email,
+          password
+        });
+
+        if (error) throw error;
+      },
+      signUpWithPassword: async (email: string, password: string) => {
+        if (!supabase) return;
+
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
           options: {
             emailRedirectTo: window.location.origin
           }

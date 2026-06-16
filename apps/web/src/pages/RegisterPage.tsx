@@ -1,28 +1,29 @@
 import { BriefcaseBusiness } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 
-export function LoginPage() {
-  const { isDemoMode, session, signInWithPassword } = useAuth();
-  const location = useLocation();
+export function RegisterPage() {
+  const { isDemoMode, session, signUpWithPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const redirectTo = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/";
 
   if (isDemoMode || session) {
-    return <Navigate to={isDemoMode ? "/" : redirectTo} replace />;
+    return <Navigate to="/" replace />;
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
+    setMessage("");
 
     try {
-      await signInWithPassword(email, password);
+      await signUpWithPassword(email, password);
+      setMessage("Account created. If email confirmation is enabled, check your inbox before signing in.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to sign in.");
+      setError(err instanceof Error ? err.message : "Unable to create account.");
     }
   }
 
@@ -38,7 +39,7 @@ export function LoginPage() {
             <span>Graduate job OS</span>
           </div>
         </div>
-        <h1>Sign in</h1>
+        <h1>Create account</h1>
         <form onSubmit={handleSubmit} className="stack-form">
           <label>
             Email
@@ -61,12 +62,13 @@ export function LoginPage() {
             />
           </label>
           <button className="primary-button" type="submit">
-            Sign in
+            Register
           </button>
         </form>
         <p className="auth-switch">
-          New to CareerOS? <Link to="/register">Create an account</Link>
+          Already have an account? <Link to="/login">Sign in</Link>
         </p>
+        {message ? <p className="success-text">{message}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </section>
     </main>

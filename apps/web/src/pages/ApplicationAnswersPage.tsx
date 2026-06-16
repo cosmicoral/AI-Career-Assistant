@@ -1,41 +1,70 @@
 import type { ApplicationQuestionResponse } from "@careeros/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquareText } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { EmptyState } from "../components/EmptyState";
+import { MockBadge } from "../components/MockBadge";
 import { PageHeader } from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
-import { sampleApplicationAnswer, sampleProfile } from "../lib/mock";
+import { useApplications, useProfile } from "../lib/queries";
 
 export function ApplicationAnswersPage() {
-  const [company, setCompany] = useState("Deloitte");
-  const [role, setRole] = useState("Graduate Consultant");
-  const [question, setQuestion] = useState("Tell me about a time you solved a complex problem.");
+  const queryClient = useQueryClient();
+  const { data: profile } = useProfile();
+  const { data: applications = [] } = useApplications();
+  const [applicationId, setApplicationId] = useState("");
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
+  const [question, setQuestion] = useState("");
   const [jobDescription, setJobDescription] = useState("");
-  const [result, setResult] = useState<ApplicationQuestionResponse | null>(sampleApplicationAnswer);
-  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ApplicationQuestionResponse | null>(null);
   const [error, setError] = useState("");
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      const data = await apiFetch<ApplicationQuestionResponse>("/api/ai/application-answer", {
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiFetch<ApplicationQuestionResponse>("/api/ai/application-answer", {
         method: "POST",
         body: JSON.stringify({
+          applicationId: applicationId || undefined,
           company,
           role,
           question,
           jobDescription,
-          careerProfile: sampleProfile
+          careerProfile: profile
         })
-      });
+      }),
+    onSuccess: async (data) => {
       setResult(data);
+      if (applicationId) {
+        await queryClient.invalidateQueries({ queryKey: ["application-workspace", applicationId] });
+      }
+    }
+  });
+
+  function handleApplicationChange(nextId: string) {
+    setApplicationId(nextId);
+    const application = applications.find((item) => item.id === nextId);
+
+    if (application) {
+      setCompany(application.company);
+      setRole(application.role);
+      setJobDescription(application.jobDescription ?? "");
+    }
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+
+    if (!profile) {
+      setError("Save your career profile before generating application answers.");
+      return;
+    }
+
+    try {
+      await mutation.mutateAsync();
     } catch (err) {
-      setResult(sampleApplicationAnswer);
       setError(err instanceof Error ? err.message : "Unable to generate answer.");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -45,9 +74,9 @@ export function ApplicationAnswersPage() {
         eyebrow="STAR answer builder"
         title="Application question assistant"
         actions={
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={mutation.isPending}>
             <MessageSquareText size={16} />
-            {loading ? "Drafting..." : "Generate answer"}
+            {mutation.isPending ? "Drafting..." : "Generate answer"}
           </button>
         }
       />
@@ -56,16 +85,27 @@ export function ApplicationAnswersPage() {
         <article className="panel form-panel">
           <h3>Question context</h3>
           <label>
+            Saved application
+            <select value={applicationId} onChange={(event) => handleApplicationChange(event.target.value)}>
+              <option value="">Not linked</option>
+              {applications.map((application) => (
+                <option key={application.id} value={application.id}>
+                  {application.company} - {application.role}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Company
-            <input value={company} onChange={(event) => setCompany(event.target.value)} />
+            <input value={company} onChange={(event) => setCompany(event.target.value)} required />
           </label>
           <label>
             Role
-            <input value={role} onChange={(event) => setRole(event.target.value)} />
+            <input value={role} onChange={(event) => setRole(event.target.value)} required />
           </label>
           <label>
             Question
-            <textarea value={question} onChange={(event) => setQuestion(event.target.value)} />
+            <textarea value={question} onChange={(event) => setQuestion(event.target.value)} required />
           </label>
           <label>
             Job description
@@ -80,11 +120,17 @@ export function ApplicationAnswersPage() {
 
         {result ? (
           <article className="panel">
-            <span className="eyebrow">Answer</span>
+            <span className="eyebrow">
+              Answer <MockBadge show={result.isMock} />
+            </span>
             <h2>{question}</h2>
             <p className="answer-output">{result.answer}</p>
           </article>
-        ) : null}
+        ) : (
+          <article className="panel">
+            <EmptyState title="No answer yet" body="Enter a real application question to generate a STAR answer." />
+          </article>
+        )}
       </section>
 
       {result ? (
