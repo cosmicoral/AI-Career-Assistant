@@ -1,0 +1,23 @@
+{
+  "name": "careeros-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "npm run dev -w @careeros/web",
+    "dev:api": "npm run dev -w @careeros/api",
+    "build": "npm run build -w @careeros/shared && npm run build -w @careeros/api && npm run build -w @careeros/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}
