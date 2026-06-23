@@ -2,7 +2,7 @@
 
 AI-powered graduate job application operating system. 
 
-Built with extensive support from Codex and Claude Code, with manual product design, architecture review, debugging and feature validation.
+Developed using AI-assisted engineering workflows (Codex and Claude Code), with hands-on ownership of product design, architecture decisions, implementation review, debugging and feature validation.
 
 CareerOS AI helps graduates manage real applications: save jobs, analyze fit, tailor materials, track statuses, prepare interviews, plan job-specific networking, and prepare for assessment centres and online tests.
 
